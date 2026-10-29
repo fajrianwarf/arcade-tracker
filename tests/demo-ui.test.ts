@@ -85,6 +85,40 @@ test("dummy MVP: hydration, catalog search, earning, sync, failures, community a
       screen.getAllByRole("button", { name: "View details" }).length,
       12,
     );
+    // The reference-inspired controls compose without introducing solution links.
+    assert.equal(
+      dom.window.document.querySelectorAll('a[href*="github.com"]').length,
+      0,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Arcade games/ }));
+    assert.equal(
+      screen.getAllByRole("button", { name: "View details" }).length,
+      5,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Completed" }));
+    assert.equal(
+      screen.getAllByRole("button", { name: "View details" }).length,
+      2,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Not completed" }));
+    assert.equal(
+      screen.getAllByRole("button", { name: "View details" }).length,
+      3,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /All activities/ }));
+    fireEvent.click(screen.getByRole("button", { name: /My targets/ }));
+    assert.equal(
+      screen.getAllByRole("button", { name: "View details" }).length,
+      2,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "List view" }));
+    assert.ok(dom.window.document.querySelector(".catalog-results.is-list"));
+    fireEvent.click(screen.getByRole("button", { name: "Grid view" }));
+    assert.equal(
+      dom.window.document.querySelector(".catalog-results.is-list"),
+      null,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
     fireEvent.change(
       screen.getByRole("textbox", { name: "Search activities" }),
       { target: { value: "Prompt" } },
@@ -186,9 +220,12 @@ test("dummy MVP: hydration, catalog search, earning, sync, failures, community a
       screen.getByRole("button", { name: "Save sample profile" }),
     );
     assert.ok(
-      screen.getByRole("alert").textContent?.includes("HTTPS Google Skills"),
+      screen
+        .getByRole("dialog")
+        .querySelector("[role=alert]")
+        ?.textContent?.includes("Google Skills"),
     );
-    fireEvent.change(screen.getByLabelText("Display name"), {
+    fireEvent.change(screen.getByLabelText(/Display name/), {
       target: { value: "Demo Two" },
     });
     fireEvent.change(screen.getByLabelText("Public profile URL"), {
@@ -208,6 +245,26 @@ test("dummy MVP: hydration, catalog search, earning, sync, failures, community a
     assert.equal(
       JSON.parse(dom.window.localStorage.getItem(storageKey)!).awards.length,
       0,
+    );
+    // URL-only entry also works after switching profiles; a second login or name is not required.
+    fireEvent.change(
+      screen.getByLabelText("Public Google Skills profile URL"),
+      {
+        target: {
+          value:
+            "https://www.skills.google/public_profiles/00000000-0000-4000-8000-000000000003",
+        },
+      },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Track profile" }));
+    await waitFor(
+      () =>
+        assert.equal(
+          JSON.parse(dom.window.localStorage.getItem(storageKey)!).awards
+            .length,
+          1,
+        ),
+      { timeout: 3000 },
     );
     assert.equal(
       requests,

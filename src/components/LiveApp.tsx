@@ -1,17 +1,350 @@
- 'use client';
-import {useEffect,useState} from 'react';
-import {createClient,SupabaseClient} from '@supabase/supabase-js';
-import type {ProfileSnapshot} from '../lib/profile';
-type Item={id:string;title:string;kind:string;source_url:string};
-let client:SupabaseClient|null=null;
-function browserDb(){if(client)return client;const url=process.env.NEXT_PUBLIC_SUPABASE_URL,key=process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;if(!url||!key)return null;return client=createClient(url,key);}
-export default function LiveApp(){
- const [tab,setTab]=useState('Progress'),[email,setEmail]=useState(''),[url,setUrl]=useState(''),[token,setToken]=useState(''),[message,setMessage]=useState(''),[snapshot,setSnapshot]=useState<ProfileSnapshot|null>(null),[busy,setBusy]=useState(false),[items,setItems]=useState<Item[]>([]),[board,setBoard]=useState<{alias:string;badges:number;last_success_at:string}[]>([]),[alias,setAlias]=useState(''),[configured,setConfigured]=useState(false);
- useEffect(()=>{const db=browserDb();setConfigured(!!db);if(!db)return;db.auth.getSession().then(({data})=>setToken(data.session?.access_token??''));const {data}=db.auth.onAuthStateChange((_,session)=>setToken(session?.access_token??''));return ()=>data.subscription.unsubscribe();},[]);
- async function request(path:string,body?:object){const res=await fetch(path,{method:body?'POST':'GET',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:body?JSON.stringify(body):undefined});const json=await res.json();if(!res.ok)throw new Error(json.error??'Request failed');return json;}
- async function act(task:()=>Promise<void>){setBusy(true);setMessage('');try{await task();}catch(e){setMessage(e instanceof Error?e.message:'Request failed');}finally{setBusy(false);}}
- async function load(){const data=await request('/api/profiles');setSnapshot(data.profile?.snapshot??null);setMessage(data.profile?.last_error??(data.stale?'Refresh queued. Your last successful snapshot stays visible.':'Progress is up to date.'));}
- return <main><header><a className="brand" href="/">◈ <span>arcade<span className="muted">atlas</span></span></a><span className="tag">COMMUNITY EDITION</span><span className="connection">{configured?'● Connected':'○ Setup required'}</span></header><section className="hero"><div className="eyebrow">YOUR NEXT SKILL STARTS HERE</div><h1>Small wins.<br/><span>Real progress.</span></h1><p>Explore Google Skills, keep your achievements in view,<br className="desktop"/> and grow alongside your community.</p><div className="notice">Independent tracker · Public profiles only · Estimated results</div></section><nav aria-label="Main sections">{['Progress','Catalog','Community'].map(t=><button key={t} className={tab===t?'active':''} onClick={()=>{setTab(t);act(async()=>{if(t==='Catalog'){setItems((await request('/api/catalog')).items);}if(t==='Community'){setBoard((await request('/api/leaderboard')).items);}});}}>{t==='Progress'?'◎':t==='Catalog'?'▦':'◇'} {t}</button>)}</nav>
- {tab==='Progress'?<><section className="grid"><article className="panel connect"><div className="eyebrow">01 / YOUR LEARNING JOURNEY</div><h2>Bring your badges together.</h2><p>Sign in, then add your public Google Skills profile. We’ll observe the achievements you choose to share.</p>{!token?<form onSubmit={e=>{e.preventDefault();act(async()=>{const db=browserDb();if(!db)throw new Error('Add Supabase environment variables to enable sign-in.');const {error}=await db.auth.signInWithOtp({email,options:{emailRedirectTo:window.location.origin}});if(error)throw error;setMessage('Check your email for your sign-in link.');});}}><label htmlFor="email">Your email</label><input id="email" type="email" placeholder="you@example.com" required value={email} onChange={e=>setEmail(e.target.value)}/><button className="primary" disabled={busy}>Send sign-in link ↗</button></form>:<form onSubmit={e=>{e.preventDefault();act(async()=>{await request('/api/profiles',{url});await load();});}}><label htmlFor="profile">Public profile URL</label><input id="profile" type="url" required placeholder="https://www.skills.google/public_profiles/…" value={url} onChange={e=>setUrl(e.target.value)}/><button className="primary" disabled={busy}>Link profile & queue sync ↗</button><button type="button" disabled={busy} onClick={()=>act(load)}>Refresh status</button><button type="button" onClick={()=>browserDb()?.auth.signOut()}>Sign out</button></form>}<small>Linking a public URL does not prove account ownership.</small></article><aside className="panel summary"><span className="eyebrow">YOUR SNAPSHOT</span><div className="orbit">{snapshot?.awards.length??'—'}</div><h3>{snapshot?.display_name??'A fresh starting point'}</h3><p>{snapshot?'Observed public badges':'Your observed badges will appear here.'}</p><div className="summaryFoot">Arcade points <strong>Pending verified rules</strong></div></aside></section><section className="panel"><div className="sectionTitle"><h2>Achievement journal</h2><span className="tag">{snapshot?'VISIBLE PUBLIC AWARDS':'AWAITING FIRST SYNC'}</span></div>{snapshot?<><p className="muted">Last observed {new Date(snapshot.fetched_at).toLocaleString()} · Visible page only</p><div className="awardList">{snapshot.awards.map(a=><a key={a.external_id} href={a.credential_url} target="_blank" rel="noreferrer"><span className="badgeIcon">✧</span><span><strong>{a.title}</strong><small>{a.earned_label||'Date unavailable'}</small></span><span>↗</span></a>)}</div></>:<div className="empty"><span>✧</span><h3>A little learning adds up.</h3><p>Link a public profile to begin your achievement journal.</p></div>}</section></>:tab==='Catalog'?<section className="panel"><div className="sectionTitle"><h2>Discover your next challenge</h2><span className="tag">VERIFIED CATALOG</span></div><p>Only reviewed activities are published. Activity identities are reviewed. Availability and season point eligibility still need verification.</p>{items.length?<div className="catalog">{items.map(i=><a className="activity" key={i.id} href={i.source_url} target="_blank" rel="noreferrer"><span className="tag">{i.kind.replace('_',' ')}</span><h3>{i.title}</h3><span>Explore activity ↗</span></a>)}</div>:<div className="empty"><h3>The catalog is ready for its first verified activities.</h3><p>No sample games or invented availability are shown.</p></div>}</section>:<section className="panel"><div className="sectionTitle"><h2>Better together.</h2><span className="tag">OPT-IN COMMUNITY</span></div><p>Ranked by observed badge count. Profiles are unverified; this is not an official Arcade points leaderboard.</p>{token&&<form className="inline" onSubmit={e=>{e.preventDefault();act(async()=>{await request('/api/leaderboard',{visible:true,alias});setBoard((await request('/api/leaderboard')).items);});}}><input aria-label="Community alias" required maxLength={40} placeholder="Choose a public alias" value={alias} onChange={e=>setAlias(e.target.value)}/><button className="primary" disabled={busy}>Join board</button><button type="button" onClick={()=>act(async()=>{await request('/api/leaderboard',{visible:false,alias:alias||'Learner'});setBoard((await request('/api/leaderboard')).items);})}>Leave board</button></form>}{board.length?<ol className="board">{board.map((r,i)=><li key={i}><strong>{r.alias}</strong><span>{r.badges} badges</span></li>)}</ol>:<div className="empty"><h3>Make room for your community.</h3><p>Opt in after linking a profile to appear here.</p></div>}</section>}
- <div role="status" aria-live="polite" className={message?'message':''}>{busy?'Working…':message}</div><footer><span>◈ arcadeatlas</span><span>Built for curiosity. Powered by your effort.</span><a href="https://support.google.com/qwiklabs/answer/9222527" target="_blank" rel="noreferrer">Make your profile public ↗</a></footer></main>;
+"use client";
+import { useEffect, useState } from "react";
+import CatalogPanel from "./CatalogPanel";
+import ProfileUrlForm from "./ProfileUrlForm";
+import { officialActivityUrl, type CatalogItem } from "../lib/catalog-view";
+import type { ProfileSnapshot } from "../lib/profile";
+type Tab = "Progress" | "Catalog" | "Community";
+const SNAPSHOT_KEY = "arcade-atlas.public-profile.v1",
+  TARGETS_KEY = "arcade-atlas.public-targets.v1";
+export default function LiveApp({
+  initialTab = "Progress",
+}: { initialTab?: Tab } = {}) {
+  const [tab, setTab] = useState<Tab>(initialTab),
+    [snapshot, setSnapshot] = useState<ProfileSnapshot | null>(null),
+    [items, setItems] = useState<CatalogItem[]>([]),
+    [targets, setTargets] = useState<string[]>([]),
+    [board, setBoard] = useState<{ alias: string; badges: number }[]>([]),
+    [busy, setBusy] = useState(false),
+    [message, setMessage] = useState(""),
+    [error, setError] = useState(""),
+    [ready, setReady] = useState(false);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SNAPSHOT_KEY);
+      if (saved) {
+        const s = JSON.parse(saved);
+        if (
+          typeof s.url === "string" &&
+          typeof s.display_name === "string" &&
+          typeof s.fetched_at === "string" &&
+          Array.isArray(s.awards) &&
+          s.awards.every(
+            (a: {
+              activity_url: unknown;
+              title: unknown;
+              credential_url: unknown;
+              external_id: unknown;
+            }) =>
+              a &&
+              typeof a.title === "string" &&
+              typeof a.external_id === "string" &&
+              typeof a.credential_url === "string" &&
+              (a.activity_url === null || typeof a.activity_url === "string"),
+          )
+        )
+          setSnapshot(s);
+      }
+      const list = JSON.parse(localStorage.getItem(TARGETS_KEY) ?? "[]");
+      if (Array.isArray(list) && list.every((v) => typeof v === "string"))
+        setTargets(list);
+    } catch {
+      /* Ignore corrupt optional browser cache. */
+    }
+    setReady(true);
+  }, []);
+  useEffect(() => {
+    if (!ready) return;
+    try {
+      if (snapshot)
+        localStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+      localStorage.setItem(TARGETS_KEY, JSON.stringify(targets));
+    } catch {
+      /* Persistence is optional; current session remains usable. */
+    }
+  }, [snapshot, targets, ready]);
+  useEffect(() => {
+    let active = true;
+    const controller = new AbortController();
+    setError("");
+    if (tab === "Catalog" || tab === "Community") {
+      fetch(tab === "Catalog" ? "/api/catalog" : "/api/leaderboard", {
+        signal: controller.signal,
+      })
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? "Unable to load data.");
+          if (active) {
+            if (tab === "Catalog") setItems(data.items);
+            else setBoard(data.items);
+          }
+        })
+        .catch((e) => {
+          if (active) setError(e.message);
+        });
+    }
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [tab]);
+  async function track(url: string, force = false) {
+    setBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch("/api/public-profile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, force }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Unable to read profile.");
+      setSnapshot(data.snapshot);
+      setMessage(
+        data.cached
+          ? "Loaded your cached public snapshot."
+          : "Public profile updated. Only visible awards were observed.",
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to read profile.");
+    } finally {
+      setBusy(false);
+    }
+  }
+  const awardUrls = new Set(
+    (snapshot?.awards ?? [])
+      .map((a) => officialActivityUrl(a.activity_url ?? undefined))
+      .filter(Boolean),
+  );
+  const completed = new Set(
+    items
+      .filter((a) => awardUrls.has(officialActivityUrl(a.source_url)))
+      .map((a) => a.id),
+  );
+  function toggleTarget(id: string) {
+    setTargets((s) =>
+      s.includes(id) ? s.filter((v) => v !== id) : [...s, id],
+    );
+  }
+  return (
+    <div className="demo-app">
+      <div className="demo-strip">
+        <span className="demo-dot" />
+        <strong>Public profile tracker</strong>
+        <span>Public Google Skills badges · independent community tool</span>
+      </div>
+      <div className="demo-shell">
+        <header className="demo-header">
+          <a href="/" className="demo-logo">
+            <span className="logo-mark">✧</span>arcade<span>atlas</span>
+          </a>
+          <nav className="demo-nav" aria-label="Main navigation">
+            {(["Progress", "Catalog", "Community"] as const).map((t) => (
+              <button
+                key={t}
+                aria-current={tab === t ? "page" : undefined}
+                className={tab === t ? "selected" : ""}
+                onClick={() => setTab(t)}
+              >
+                {t}
+              </button>
+            ))}
+          </nav>
+          <span className="soft-tag">Google Skills</span>
+        </header>
+        <main className="demo-main">
+          <section className="demo-heading">
+            <div>
+              <span className="demo-eyebrow">
+                YOUR LEARNING, A LITTLE CLEARER
+              </span>
+              <h1>
+                {tab === "Catalog" ? (
+                  <>
+                    Find your <em>next challenge.</em>
+                  </>
+                ) : tab === "Community" ? (
+                  <>
+                    Go further, <em>together.</em>
+                  </>
+                ) : (
+                  <>
+                    Your progress starts <em>with one link.</em>
+                  </>
+                )}
+              </h1>
+              <p>
+                {tab === "Progress"
+                  ? "Paste your public Google Skills profile URL. No Google account sign-in required."
+                  : tab === "Catalog"
+                    ? "Explore games and skill badges. Save your next targets."
+                    : "An opt-in board of publicly observed badge progress."}
+              </p>
+            </div>
+          </section>
+          {error && (
+            <div className="inline-warning live-error" role="alert">
+              {error}
+              {snapshot &&
+                tab === "Progress" &&
+                " Your previous snapshot is still visible."}
+            </div>
+          )}
+          {message && (
+            <p role="status" className="demo-notice">
+              {message}
+            </p>
+          )}
+          {tab === "Progress" ? (
+            <>
+              <section className="demo-panel profile-entry-panel">
+                <div>
+                  <span className="demo-eyebrow">
+                    PUBLIC GOOGLE SKILLS PROFILE
+                  </span>
+                  <h2>One link. Your learning in view.</h2>
+                  <p>
+                    Use the shareable profile link from Google Skills, where
+                    your badges are displayed.
+                  </p>
+                </div>
+                <ProfileUrlForm
+                  key={snapshot?.url ?? "empty"}
+                  initialUrl={snapshot?.url}
+                  busy={busy}
+                  onSubmit={(url) => track(url)}
+                />
+              </section>
+              {snapshot ? (
+                <>
+                  <section className="demo-two-col">
+                    <article className="demo-panel learner-panel">
+                      <div className="panel-heading">
+                        <span className="demo-eyebrow">
+                          YOUR PUBLIC SNAPSHOT
+                        </span>
+                        <span className="soft-tag">Ownership unverified</span>
+                      </div>
+                      <div className="learner-row">
+                        <div className="large-avatar">
+                          {snapshot.display_name.charAt(0)}
+                        </div>
+                        <div>
+                          <h2>{snapshot.display_name}</h2>
+                          <p>{snapshot.awards.length} visible badges</p>
+                        </div>
+                      </div>
+                      <p className="subtle">
+                        Last observed{" "}
+                        {new Date(snapshot.fetched_at).toLocaleString()} ·
+                        visible page only
+                      </p>
+                      <button
+                        className="demo-button secondary"
+                        disabled={busy}
+                        onClick={() => void track(snapshot.url, true)}
+                      >
+                        {busy ? "Refreshing…" : "Refresh public profile"}
+                      </button>
+                    </article>
+                    <article className="demo-panel next-panel">
+                      <span className="demo-eyebrow">FIND YOUR NEXT STEP</span>
+                      <h2>Keep your curiosity going.</h2>
+                      <p>
+                        Open the catalog to compare your earned badges and save
+                        activities to your targets.
+                      </p>
+                      <button
+                        className="text-button"
+                        onClick={() => setTab("Catalog")}
+                      >
+                        Browse the catalog →
+                      </button>
+                      <small className="sample-rule">
+                        Arcade points remain pending verified season rules.
+                      </small>
+                    </article>
+                  </section>
+                  <section className="demo-panel journal-panel">
+                    <div className="panel-heading">
+                      <h2>Achievement journal</h2>
+                      <span className="soft-tag">
+                        {snapshot.awards.length} observed awards
+                      </span>
+                    </div>
+                    <div className="journal-grid">
+                      {snapshot.awards.map((a) => (
+                        <div className="journal-item" key={a.external_id}>
+                          <span
+                            className="catalog-default-badge small"
+                            aria-hidden="true"
+                          >
+                            ✧
+                          </span>
+                          <span>
+                            <strong>{a.title}</strong>
+                            <small>
+                              {a.earned_label || "Earned date unavailable"}
+                            </small>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </section>
+                </>
+              ) : (
+                <section className="demo-panel demo-empty">
+                  <h3>Bring your badges into view.</h3>
+                  <p>
+                    Your profile must be public. A Cloud Console account URL
+                    does not show learning badges.
+                  </p>
+                </section>
+              )}
+            </>
+          ) : tab === "Catalog" ? (
+            <CatalogPanel
+              items={items}
+              completed={completed}
+              saved={new Set(targets)}
+              profileLinked={!!snapshot}
+              onSave={toggleTarget}
+              onTrack={() => setTab("Progress")}
+            />
+          ) : (
+            <section className="demo-panel">
+              <div className="panel-heading">
+                <h2>Community board</h2>
+                <span className="soft-tag">Observed badges</span>
+              </div>
+              <p>
+                Profiles appear only after opting in. Linking a public URL does
+                not verify account ownership.
+              </p>
+              {board.length ? (
+                <ol className="board">
+                  {board.map((r, i) => (
+                    <li key={i}>
+                      <strong>{r.alias}</strong>
+                      <span>{r.badges} badges</span>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <div className="demo-empty">
+                  <h3>The community is just getting started.</h3>
+                  <p>No recent opted-in profiles to display.</p>
+                </div>
+              )}
+            </section>
+          )}
+          <footer className="demo-footer">
+            <strong>✧ arcadeatlas</strong>
+            <span>Independent tracker · Public data only</span>
+          </footer>
+        </main>
+      </div>
+    </div>
+  );
 }

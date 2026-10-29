@@ -1,13 +1,7 @@
 import * as cheerio from 'cheerio';
 export const ADAPTER_VERSION = 'google-public-html/v1';
-export class SourceError extends Error { constructor(public code:string, message:string){super(message);} }
-const hosts = new Set(['skills.google','www.skills.google','cloudskillsboost.google','www.cloudskillsboost.google']);
-export function normalizeProfile(input:string) {
- let u:URL; try {u=new URL(input);}catch{throw new SourceError('invalid_url','Enter a full HTTPS public profile URL.');}
- const match=u.pathname.match(/^\/public_profiles\/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})\/?$/i);
- if(u.protocol!=='https:'||!hosts.has(u.hostname)||u.port||u.username||u.password||!match) throw new SourceError('invalid_url','Only Google Skills public profile URLs are accepted.');
- return `https://www.skills.google/public_profiles/${match[1].toLowerCase()}`;
-}
+import {normalizeProfile,SourceError} from './profile-url';
+export {normalizeProfile,SourceError} from './profile-url';
 export type Award={external_id:string;title:string;earned_on:string|null;earned_label:string;credential_url:string;activity_url:string|null};
 export type ProfileSnapshot={url:string;display_name:string;awards:Award[];fetched_at:string;adapter_version:string;coverage:'visible_page_only';warnings:string[]};
 export function parseProfile(html:string,url:string):ProfileSnapshot {
@@ -50,3 +44,4 @@ export async function fetchProfile(input:string, fetcher:typeof fetch=fetch):Pro
  throw new SourceError('redirect','Too many redirects.');
  }finally{clearTimeout(timeout);}
 }
+

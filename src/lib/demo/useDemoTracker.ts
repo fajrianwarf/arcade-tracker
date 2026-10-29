@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   completeDemoSync,
+  linkDemoProfile,
   createDemoState,
   restoreDemoState,
   type DemoState,
@@ -62,8 +63,14 @@ export function useDemoTracker() {
   }, []);
   async function sync(
     outcome: "success" | "private" | "rate_limit" = "success",
+    prepare?: (value: DemoState) => DemoState,
   ) {
-    if (running.current || !state.signedIn || !state.profile.linked) return;
+    if (
+      running.current ||
+      (!prepare && (!state.signedIn || !state.profile.linked))
+    )
+      return;
+    if (prepare) setState(prepare);
     running.current = true;
     const id = ++runId.current;
     const pause = () => new Promise((resolve) => setTimeout(resolve, 550));
@@ -77,11 +84,28 @@ export function useDemoTracker() {
     setPhase("idle");
     running.current = false;
   }
+  function trackProfile(url: string) {
+    return sync("success", (current) => ({
+      ...(current.profile.url === url
+        ? current
+        : linkDemoProfile(current, "Demo learner", url)),
+      signedIn: true,
+    }));
+  }
   function reset() {
     runId.current++;
     running.current = false;
     setPhase("idle");
     setState(createDemoState(new Date().toISOString()));
   }
-  return { state, setState, ready, storageNotice, phase, sync, reset };
+  return {
+    state,
+    setState,
+    ready,
+    storageNotice,
+    phase,
+    sync,
+    trackProfile,
+    reset,
+  };
 }

@@ -1,4 +1,7 @@
 "use client";
+import CatalogPanel from "./CatalogPanel";
+import ProfileUrlForm from "./ProfileUrlForm";
+import { normalizeProfile } from "../lib/profile-url";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   DEMO_CATALOG,
@@ -173,14 +176,23 @@ function Modal({
     </dialog>
   );
 }
-export default function DemoApp() {
-  const { state, setState, ready, storageNotice, phase, sync, reset } =
-    useDemoTracker();
+export default function DemoApp({
+  initialTab = "Progress",
+}: { initialTab?: "Progress" | "Catalog" | "Community" } = {}) {
+  const {
+    state,
+    setState,
+    ready,
+    storageNotice,
+    phase,
+    sync,
+    trackProfile,
+    reset,
+  } = useDemoTracker();
   const [tab, setTab] = useState<"Progress" | "Catalog" | "Community">(
-    "Progress",
+    initialTab,
   );
   const [filter, setFilter] = useState("all"),
-    [query, setQuery] = useState(""),
     [detail, setDetail] = useState<DemoActivity | null>(null);
   const [modal, setModal] = useState<"profile" | "lab" | "rules" | null>(null),
     [notice, setNotice] = useState("");
@@ -197,13 +209,6 @@ export default function DemoApp() {
     completed = new Set(state.awards.map((a) => a.activity_id));
   const stale = ready && isDemoStale(state),
     board = demoLeaderboard(state);
-  const filtered = DEMO_CATALOG.filter(
-    (a) =>
-      (filter === "all" ||
-        (filter === "saved" && state.saved.includes(a.id)) ||
-        a.kind === filter) &&
-      `${a.title} ${a.topic}`.toLowerCase().includes(query.toLowerCase()),
-  );
   const suggestions = DEMO_CATALOG.filter(
     (a) => !completed.has(a.id) && a.kind !== "other",
   ).slice(0, 2);
@@ -364,6 +369,30 @@ export default function DemoApp() {
           )}
           {tab === "Progress" ? (
             <>
+              <section className="demo-panel profile-entry-panel">
+                <div>
+                  <span className="demo-eyebrow">
+                    START WITH YOUR PUBLIC PROFILE
+                  </span>
+                  <h2>One link. Your learning in view.</h2>
+                  <p>
+                    Paste the shareable link from Google Skills to track earned
+                    badges.
+                  </p>
+                </div>
+                <ProfileUrlForm
+                  key={state.profile.url}
+                  initialUrl={state.profile.url}
+                  busy={busy}
+                  sample
+                  onSubmit={async (url) => {
+                    await trackProfile(url);
+                    toast(
+                      "Sample public profile loaded. No Google account credentials were used.",
+                    );
+                  }}
+                />
+              </section>
               <section className="demo-stats" aria-label="Progress summary">
                 <article>
                   <div className="stat-label">
@@ -642,107 +671,34 @@ export default function DemoApp() {
               )}
             </>
           ) : tab === "Catalog" ? (
-            <>
-              <section className="catalog-toolbar">
-                <div className="catalog-filters" aria-label="Filter activities">
-                  {[
-                    { id: "all", label: "All activities" },
-                    { id: "game", label: "Arcade games" },
-                    { id: "skill_badge", label: "Skill badges" },
-                    { id: "saved", label: "Saved" },
-                  ].map((f) => (
-                    <button
-                      key={f.id}
-                      aria-pressed={filter === f.id}
-                      className={filter === f.id ? "selected" : ""}
-                      onClick={() => setFilter(f.id)}
-                    >
-                      {f.label}
-                      {f.id === "saved" && <span>{state.saved.length}</span>}
-                    </button>
-                  ))}
-                </div>
-                <label className="catalog-search">
-                  <Icon name="search" size={18} />
-                  <input
-                    aria-label="Search activities"
-                    placeholder="Search activities or topics…"
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                  />
-                </label>
-              </section>
-              <div className="catalog-count">
-                <span>{filtered.length} sample activities</span>
-                <span>Availability and rewards are fictional</span>
-              </div>
-              {filtered.length ? (
-                <section className="demo-catalog">
-                  {filtered.map((a) => (
-                    <article className="demo-activity" key={a.id}>
-                      <div className={`activity-art ${a.color}`}>
-                        <BadgeArt activity={a} />
-                        {completed.has(a.id) && (
-                          <span className="completed-tag">
-                            <Icon name="check" size={13} />
-                            Completed
-                          </span>
-                        )}
-                        <button
-                          className={`save-button ${state.saved.includes(a.id) ? "saved" : ""}`}
-                          aria-label={`${state.saved.includes(a.id) ? "Unsave" : "Save"} ${a.title}`}
-                          aria-pressed={state.saved.includes(a.id)}
-                          onClick={() => {
-                            setState((s) => toggleSaved(s, a.id));
-                          }}
-                          disabled={!ready}
-                        >
-                          <Icon name="bookmark" size={18} />
-                        </button>
-                      </div>
-                      <div className="activity-content">
-                        <div className="activity-meta">
-                          <span>{kindLabel(a.kind)}</span>
-                          <span>{a.topic}</span>
-                        </div>
-                        <h2>{a.title}</h2>
-                        <p>{a.description}</p>
-                        <div className="activity-bottom">
-                          <span>
-                            <Icon name="clock" size={14} />
-                            {a.minutes} min
-                          </span>
-                          <button
-                            className="text-button"
-                            onClick={() => setDetail(a)}
-                          >
-                            View details <Icon name="arrow" size={15} />
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  ))}
-                </section>
-              ) : (
-                <div className="demo-empty demo-panel">
-                  <Icon name="search" size={30} />
-                  <h3>No activities found.</h3>
-                  <p>
-                    Try another search, or save an activity to build your
-                    shortlist.
-                  </p>
-                  <button
-                    className="demo-button secondary"
-                    onClick={() => {
-                      setQuery("");
-                      setFilter("all");
-                    }}
-                  >
-                    Clear filters
-                  </button>
-                </div>
+            <CatalogPanel
+              items={DEMO_CATALOG.map((a) => ({
+                ...a,
+                access_code:
+                  a.kind === "game"
+                    ? `DEMO-${a.id.slice(5).toUpperCase()}`
+                    : undefined,
+              }))}
+              completed={completed}
+              saved={new Set(state.saved)}
+              sample
+              profileLinked={state.profile.linked}
+              initialKind={filter === "saved" ? "all" : filter}
+              initialStatus={filter === "saved" ? "saved" : "all"}
+              onSave={(id) => setState((s) => toggleSaved(s, id))}
+              onOpen={(item) =>
+                setDetail(DEMO_CATALOG.find((a) => a.id === item.id)!)
+              }
+              onTrack={() => {
+                setTab("Progress");
+                openProfile();
+              }}
+              renderArt={(item) => (
+                <BadgeArt
+                  activity={DEMO_CATALOG.find((a) => a.id === item.id)!}
+                />
               )}
-            </>
+            />
           ) : (
             <>
               <section className="community-summary">
@@ -996,32 +952,17 @@ export default function DemoApp() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
-              let u: URL;
+              let canonical: string;
               try {
-                u = new URL(profileUrl);
-                if (
-                  u.protocol !== "https:" ||
-                  ![
-                    "www.skills.google",
-                    "skills.google",
-                    "www.cloudskillsboost.google",
-                    "cloudskillsboost.google",
-                  ].includes(u.hostname) ||
-                  u.port ||
-                  u.username ||
-                  u.password ||
-                  !/^\/public_profiles\/[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}\/?$/i.test(
-                    u.pathname,
-                  )
-                )
-                  throw new Error();
-              } catch {
+                canonical = normalizeProfile(profileUrl.trim());
+              } catch (e) {
                 setFormError(
-                  "Enter an HTTPS Google Skills public profile URL with its profile UUID.",
+                  e instanceof Error
+                    ? e.message
+                    : "Enter a public Google Skills profile URL.",
                 );
                 return;
               }
-              const canonical = `https://www.skills.google${u.pathname.replace(/\/$/, "")}`;
               setState((s) =>
                 canonical === s.profile.url
                   ? {
@@ -1039,10 +980,9 @@ export default function DemoApp() {
               );
             }}
           >
-            <label htmlFor="demo-name">Display name</label>
+            <label htmlFor="demo-name">Display name (optional in demo)</label>
             <input
               id="demo-name"
-              required
               maxLength={60}
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -1189,7 +1129,6 @@ export default function DemoApp() {
               onClick={() => {
                 reset();
                 setAlias("Alex M.");
-                setQuery("");
                 setFilter("all");
                 setModal(null);
                 toast("Demo reset to its starting data.");

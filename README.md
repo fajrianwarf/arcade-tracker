@@ -31,8 +31,8 @@ npm run typecheck
 
 | Area | Dummy implementation |
 | --- | --- |
-| Catalog | 12 fictional activities; search, type filters, saved shortlist, details dialog and completion state |
-| Personal progress | Seeded learner, earned badges, point breakdown and goal, editable sample profile, empty states |
+| Catalog | Reference-inspired badge catalog at `/catalog`; type counts, search, completion/target filters, grid/list views, sample access codes, and activity details; no GitHub links |
+| Personal progress | Public Google Skills profile URL is the only required tracking input; seeded learner, badges, point breakdown, and empty states |
 | Synchronization | Queued → reading → saving; adds the next sample badge; cached progress stays visible |
 | Failure handling | Simulate private profile or HTTP 429, preserve cached awards, recover with a successful sync |
 | Community | Fictional leaderboard, rank by points/badges, opt in, update alias, leave board |
@@ -59,18 +59,19 @@ ENABLE_PUBLIC_HTML_INGESTION=false
 ```
 
 1. Apply both files under `supabase/migrations/` in filename order.
-2. Enable email magic-link Auth, configure the Site URL and redirect allowlist, and set up suitable email delivery.
+2. The public profile reader needs only a public Google Skills URL, with no account login. Supabase Auth configuration is needed only for the retained account-backed backend APIs, not for looking up badges.
 3. Add the variables to `.env.local` for local work and Vercel environment settings for deployment. Keep the service-role key and cron secret server-side. Restart/rebuild after changing the data mode.
 4. Review source access constraints in `docs/source-feasibility.md` before opting into unsupported public HTML ingestion with `ENABLE_PUBLIC_HTML_INGESTION=true`.
 5. Set up Supabase Cron, pg_net and Vault using `supabase/cron.sql`. Optional `supabase/functions/sync-dispatch` forwards to the Vercel worker; optional GitHub dispatch schedule is disabled by default. Use one scheduler.
 
-Selecting `supabase` never silently substitutes dummy data when configuration fails. Browser demo state is isolated under `arcade-atlas.demo.v1`; it is not uploaded or used as real scoring evidence. Backend routes and CLI collectors remain real integration paths and need their documented configuration; the demo UI does not call them.
+Selecting `supabase` never silently substitutes dummy data when configuration fails. Browser demo state is isolated under `arcade-atlas.demo.v1`; it is not uploaded or used as real scoring evidence. Backend routes and CLI collectors remain real integration paths and need their documented configuration; the demo UI does not call them. The URL-first live UI uses `/api/public-profile`; its Google HTML adapter remains gated by `ENABLE_PUBLIC_HTML_INGESTION=true`. Its bounded six-hour cache, request budget, and coalescing are per server instance, not a distributed quota. Browser cache preserves the last successful snapshot on failure. The live community view displays the existing opt-in board; account enrollment is not part of the public lookup flow. Use a shared rate limiter before enabling unrestricted public collection at scale.
 
 ## Real backend API contracts
 
 | Route | Access | Result |
 | --- | --- | --- |
-| POST `/api/profiles` `{url}` | Supabase Bearer token | Observation link + persistent sync job |
+| POST `/api/public-profile` `{url,force?}` | Public; ingestion feature flag | Read visible Google Skills badges without login |
+| POST `/api/profiles` `{url}` | Supabase Bearer token | Optional account-backed observation link + persistent sync job |
 | GET `/api/profiles` | Supabase Bearer token | Cached snapshot + stale flag; enqueue revalidation |
 | GET `/api/catalog` | Public | Reviewed published catalog |
 | GET `/api/leaderboard` | Public | Opt-in observed-badge board |
@@ -95,6 +96,9 @@ Catalog collection emits unpublished review candidates. Seed migrations contain 
 ```text
 src/app/page.tsx                 Explicit demo / Supabase mode selection
 src/components/DemoApp.tsx       Interactive dummy MVP
+src/components/CatalogPanel.tsx  Shared catalog, safe Google links and progress filters
+src/components/ProfileUrlForm.tsx URL-only tracking entry
+src/lib/public-profile.ts        Bounded public reader; cache and request coalescing
 src/components/LiveApp.tsx       Retained real integration UI
 src/lib/demo/model.ts            Fictional catalog and pure state/scoring operations
 src/lib/demo/useDemoTracker.ts   Persistence and simulated asynchronous worker
@@ -109,3 +113,4 @@ supabase/                       RLS schema, queue RPCs, Cron and Edge gateway
 `npm test` covers the demo state model, client hydration and component workflow in an isolated DOM, and embedded PostgreSQL migration/RLS/queue behavior. The component flow exercises search, earning badges, sync failure/recovery, community membership, guest sessions, reload persistence, invalid profile URLs and relinking without network requests.
 
 Live Supabase Auth/RLS/SMTP, Cron/Vault/pg_net, Edge deployment and Vercel remain unverified without resources. Browser visual review reached the rendered dashboard; further browser interaction checks were blocked by the cloud browser's URL policy. The isolated DOM tests do not replace a full browser/mobile layout check. See `docs/demo-validation.md`.
+
