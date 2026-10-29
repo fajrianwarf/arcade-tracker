@@ -6,11 +6,11 @@ import { PublicProfileReader } from "../../../lib/public-profile";
 export const maxDuration = 30;
 const reader = new PublicProfileReader(fetchProfile);
 export async function POST(request: Request) {
-  if (process.env.ENABLE_PUBLIC_HTML_INGESTION !== "true")
+  if (process.env.DISABLE_PUBLIC_PROFILE_READING === "true")
     return NextResponse.json(
       {
         error:
-          "Live profile reading is not enabled yet. The demo remains available; no Google sign-in is needed.",
+          "Public profile reading is temporarily unavailable. Please try again later.",
         code: "source_disabled",
       },
       { status: 503 },

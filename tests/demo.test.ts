@@ -5,7 +5,6 @@ import {
   DEMO_RULE,
   completeDemoSync,
   createDemoState,
-  demoLeaderboard,
   demoScore,
   earnDemoAward,
   isDemoStale,
@@ -57,32 +56,17 @@ test("private and rate-limited sync preserve cache; recovery clears error", () =
     assert.equal(completeDemoSync(failed, "success").lastError, null);
   }
 });
-test("opt-in and failed verification control community exposure", () => {
-  const state = createDemoState();
-  assert.ok(!demoLeaderboard(state).some((r) => r.you));
-  const joined = { ...state, community: { visible: true, alias: "My alias" } };
-  assert.equal(demoLeaderboard(joined).find((r) => r.you)?.alias, "My alias");
-  assert.ok(
-    !demoLeaderboard(completeDemoSync(joined, "private")).some((r) => r.you),
-  );
-  assert.ok(
-    demoLeaderboard(completeDemoSync(joined, "success")).some((r) => r.you),
-  );
-});
-test("guest cannot change observed awards or appear on community board", () => {
+test("guest cannot change observed awards", () => {
   const state = {
     ...createDemoState(),
     signedIn: false,
-    community: { visible: true, alias: "Guest" },
   };
   assert.deepEqual(earnDemoAward(state, "skill-ai"), state);
   assert.deepEqual(completeDemoSync(state, "success"), state);
-  assert.ok(!demoLeaderboard(state).some((r) => r.you));
 });
-test("relink resets observations and community opt-in, preserves shortlist", () => {
+test("relink resets observations and preserves shortlist", () => {
   const state = {
     ...createDemoState(),
-    community: { visible: true, alias: "Alias" },
   };
   const next = linkDemoProfile(
     state,
@@ -90,7 +74,6 @@ test("relink resets observations and community opt-in, preserves shortlist", () 
     "https://www.skills.google/public_profiles/00000000-0000-4000-8000-000000000002",
   );
   assert.equal(next.awards.length, 0);
-  assert.equal(next.community.visible, false);
   assert.equal(next.profile.name, "New name");
   assert.deepEqual(next.saved, state.saved);
 });
@@ -128,4 +111,17 @@ test("stale threshold is six hours, preserving the last successful snapshot", ()
   const state = createDemoState(new Date(now).toISOString());
   assert.equal(isDemoStale(state, now + 5 * 3600_000), false);
   assert.equal(isDemoStale(state, now + 7 * 3600_000), true);
+});
+
+test("legacy browser data keeps progress while ignoring retired community membership", () => {
+  const seed = createDemoState();
+  assert.deepEqual(
+    restoreDemoState(
+      JSON.stringify({
+        ...seed,
+        community: { visible: true, alias: "Old alias" },
+      }),
+    ),
+    seed,
+  );
 });

@@ -4,7 +4,7 @@ import CatalogPanel from "./CatalogPanel";
 import ProfileUrlForm from "./ProfileUrlForm";
 import { officialActivityUrl, type CatalogItem } from "../lib/catalog-view";
 import type { ProfileSnapshot } from "../lib/profile";
-type Tab = "Progress" | "Catalog" | "Community";
+type Tab = "Progress" | "Catalog";
 const SNAPSHOT_KEY = "arcade-atlas.public-profile.v1",
   TARGETS_KEY = "arcade-atlas.public-targets.v1";
 export default function LiveApp({
@@ -14,7 +14,6 @@ export default function LiveApp({
     [snapshot, setSnapshot] = useState<ProfileSnapshot | null>(null),
     [items, setItems] = useState<CatalogItem[]>([]),
     [targets, setTargets] = useState<string[]>([]),
-    [board, setBoard] = useState<{ alias: string; badges: number }[]>([]),
     [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
     [error, setError] = useState(""),
@@ -67,16 +66,15 @@ export default function LiveApp({
     let active = true;
     const controller = new AbortController();
     setError("");
-    if (tab === "Catalog" || tab === "Community") {
-      fetch(tab === "Catalog" ? "/api/catalog" : "/api/leaderboard", {
+    if (tab === "Catalog") {
+      fetch("/api/catalog", {
         signal: controller.signal,
       })
         .then(async (res) => {
           const data = await res.json();
           if (!res.ok) throw new Error(data.error ?? "Unable to load data.");
           if (active) {
-            if (tab === "Catalog") setItems(data.items);
-            else setBoard(data.items);
+            setItems(data.items);
           }
         })
         .catch((e) => {
@@ -132,7 +130,7 @@ export default function LiveApp({
       <div className="demo-strip">
         <span className="demo-dot" />
         <strong>Public profile tracker</strong>
-        <span>Public Google Skills badges · independent community tool</span>
+        <span>Public Google Skills badges · independent learning tool</span>
       </div>
       <div className="demo-shell">
         <header className="demo-header">
@@ -140,7 +138,7 @@ export default function LiveApp({
             <span className="logo-mark">✧</span>arcade<span>atlas</span>
           </a>
           <nav className="demo-nav" aria-label="Main navigation">
-            {(["Progress", "Catalog", "Community"] as const).map((t) => (
+            {(["Progress", "Catalog"] as const).map((t) => (
               <button
                 key={t}
                 aria-current={tab === t ? "page" : undefined}
@@ -164,10 +162,6 @@ export default function LiveApp({
                   <>
                     Find your <em>next challenge.</em>
                   </>
-                ) : tab === "Community" ? (
-                  <>
-                    Go further, <em>together.</em>
-                  </>
                 ) : (
                   <>
                     Your progress starts <em>with one link.</em>
@@ -177,9 +171,7 @@ export default function LiveApp({
               <p>
                 {tab === "Progress"
                   ? "Paste your public Google Skills profile URL. No Google account sign-in required."
-                  : tab === "Catalog"
-                    ? "Explore games and skill badges. Save your next targets."
-                    : "An opt-in board of publicly observed badge progress."}
+                  : "Explore games and skill badges. Save your next targets."}
               </p>
             </div>
           </section>
@@ -303,7 +295,7 @@ export default function LiveApp({
                 </section>
               )}
             </>
-          ) : tab === "Catalog" ? (
+          ) : (
             <CatalogPanel
               items={items}
               completed={completed}
@@ -312,32 +304,6 @@ export default function LiveApp({
               onSave={toggleTarget}
               onTrack={() => setTab("Progress")}
             />
-          ) : (
-            <section className="demo-panel">
-              <div className="panel-heading">
-                <h2>Community board</h2>
-                <span className="soft-tag">Observed badges</span>
-              </div>
-              <p>
-                Profiles appear only after opting in. Linking a public URL does
-                not verify account ownership.
-              </p>
-              {board.length ? (
-                <ol className="board">
-                  {board.map((r, i) => (
-                    <li key={i}>
-                      <strong>{r.alias}</strong>
-                      <span>{r.badges} badges</span>
-                    </li>
-                  ))}
-                </ol>
-              ) : (
-                <div className="demo-empty">
-                  <h3>The community is just getting started.</h3>
-                  <p>No recent opted-in profiles to display.</p>
-                </div>
-              )}
-            </section>
           )}
           <footer className="demo-footer">
             <strong>✧ arcadeatlas</strong>

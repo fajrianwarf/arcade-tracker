@@ -8,7 +8,6 @@ import {
   DEMO_PROFILE_URL,
   DEMO_RULE,
   demoScore,
-  demoLeaderboard,
   earnDemoAward,
   isDemoStale,
   linkDemoProfile,
@@ -178,7 +177,7 @@ function Modal({
 }
 export default function DemoApp({
   initialTab = "Progress",
-}: { initialTab?: "Progress" | "Catalog" | "Community" } = {}) {
+}: { initialTab?: "Progress" | "Catalog" } = {}) {
   const {
     state,
     setState,
@@ -189,9 +188,7 @@ export default function DemoApp({
     trackProfile,
     reset,
   } = useDemoTracker();
-  const [tab, setTab] = useState<"Progress" | "Catalog" | "Community">(
-    initialTab,
-  );
+  const [tab, setTab] = useState<"Progress" | "Catalog">(initialTab);
   const [filter, setFilter] = useState("all"),
     [detail, setDetail] = useState<DemoActivity | null>(null);
   const [modal, setModal] = useState<"profile" | "lab" | "rules" | null>(null),
@@ -199,16 +196,10 @@ export default function DemoApp({
   const [name, setName] = useState("Alex Morgan"),
     [profileUrl, setProfileUrl] = useState(DEMO_PROFILE_URL),
     [formError, setFormError] = useState("");
-  const [alias, setAlias] = useState(state.community.alias),
-    [sort, setSort] = useState("points");
-  useEffect(() => {
-    setAlias(state.community.alias);
-  }, [state.community.alias]);
   const busy = phase !== "idle",
     score = demoScore(state),
     completed = new Set(state.awards.map((a) => a.activity_id));
-  const stale = ready && isDemoStale(state),
-    board = demoLeaderboard(state);
+  const stale = ready && isDemoStale(state);
   const suggestions = DEMO_CATALOG.filter(
     (a) => !completed.has(a.id) && a.kind !== "other",
   ).slice(0, 2);
@@ -233,7 +224,6 @@ export default function DemoApp({
   const navItems = [
     { label: "Progress", icon: "spark" },
     { label: "Catalog", icon: "grid" },
-    { label: "Community", icon: "users" },
   ] as const;
   return (
     <div className="demo-app">
@@ -287,31 +277,23 @@ export default function DemoApp({
               <div className="demo-eyebrow">
                 {tab === "Progress"
                   ? "YOUR LEARNING, A LITTLE CLEARER"
-                  : tab === "Catalog"
-                    ? "A LITTLE CURIOSITY GOES A LONG WAY"
-                    : "GOOD COMPANY. SHARED PROGRESS."}
+                  : "A LITTLE CURIOSITY GOES A LONG WAY"}
               </div>
               <h1>
                 {tab === "Progress" ? (
                   <>
                     Make room for <em>your next win.</em>
                   </>
-                ) : tab === "Catalog" ? (
-                  <>
-                    Find your <em>next challenge.</em>
-                  </>
                 ) : (
                   <>
-                    Go further, <em>together.</em>
+                    Find your <em>next challenge.</em>
                   </>
                 )}
               </h1>
               <p>
                 {tab === "Progress"
-                  ? "Your badges, your next steps, and a community to grow with."
-                  : tab === "Catalog"
-                    ? "A small collection of sample games and skill badges to explore."
-                    : "Celebrate the small wins. See what a community dashboard could feel like."}
+                  ? "Your badges, your next steps, and a little learning momentum."
+                  : "A small collection of sample games and skill badges to explore."}
               </p>
             </div>
             {tab === "Progress" ? (
@@ -329,9 +311,7 @@ export default function DemoApp({
                 {busy ? "Syncing…" : "Sync profile"}
               </button>
             ) : (
-              <span className="soft-tag">
-                <span className="demo-dot" /> Sample {tab.toLowerCase()}
-              </span>
+              <span className="soft-tag">Sample catalog</span>
             )}
           </section>
           {!state.signedIn && (
@@ -340,7 +320,7 @@ export default function DemoApp({
                 <strong>You’re exploring as a guest.</strong>
                 <p>
                   Enter the demo to try profile sync, badge completion, and
-                  community membership.
+                  activity targets.
                 </p>
               </div>
               <button
@@ -670,7 +650,7 @@ export default function DemoApp({
                 </section>
               )}
             </>
-          ) : tab === "Catalog" ? (
+          ) : (
             <CatalogPanel
               items={DEMO_CATALOG.map((a) => ({
                 ...a,
@@ -699,190 +679,6 @@ export default function DemoApp({
                 />
               )}
             />
-          ) : (
-            <>
-              <section className="community-summary">
-                <div className="demo-panel">
-                  <Icon name="users" size={24} />
-                  <strong>{board.length}</strong>
-                  <span>sample learners</span>
-                </div>
-                <div className="demo-panel">
-                  <Icon name="spark" size={24} />
-                  <strong>{board.reduce((sum, r) => sum + r.badges, 0)}</strong>
-                  <span>sample badges earned</span>
-                </div>
-                <div className="community-note">
-                  <strong>Learning looks better together.</strong>
-                  <p>
-                    These are fictional learners and illustrative points. No
-                    real community data is shared.
-                  </p>
-                </div>
-              </section>
-              <div className="demo-community-layout">
-                <section className="demo-panel leaderboard-panel">
-                  <div className="panel-heading">
-                    <div>
-                      <h2>The community board</h2>
-                      <p>A little friendly momentum.</p>
-                    </div>
-                    <label className="sort-label">
-                      Rank by{" "}
-                      <select
-                        aria-label="Leaderboard metric"
-                        value={sort}
-                        onChange={(e) => setSort(e.target.value)}
-                      >
-                        <option value="points">Demo points</option>
-                        <option value="badges">Badge count</option>
-                      </select>
-                    </label>
-                  </div>
-                  <div className="board-scroll">
-                    <table className="demo-board">
-                      <thead>
-                        <tr>
-                          <th scope="col">Rank</th>
-                          <th scope="col">Learner</th>
-                          <th scope="col">Badges</th>
-                          <th scope="col">Demo points</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {[...board]
-                          .sort((a, b) =>
-                            sort === "badges"
-                              ? b.badges - a.badges || b.points - a.points
-                              : b.points - a.points || b.badges - a.badges,
-                          )
-                          .map((r, i) => (
-                            <tr key={r.id} className={r.you ? "your-row" : ""}>
-                              <td>
-                                <span
-                                  className={`rank ${i === 0 ? "first" : ""}`}
-                                >
-                                  {String(i + 1).padStart(2, "0")}
-                                </span>
-                              </td>
-                              <td>
-                                <span
-                                  aria-hidden="true"
-                                  className={`board-avatar tone-${i % 3}`}
-                                >
-                                  {r.alias[0]}
-                                </span>
-                                <strong>{r.alias}</strong>
-                                {r.you && (
-                                  <>
-                                    {" "}
-                                    <span className="you-tag">You</span>
-                                  </>
-                                )}
-                              </td>
-                              <td>{r.badges}</td>
-                              <td>
-                                <strong>{r.points}</strong>
-                                <span className="point-unit"> pts</span>
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <div className="board-foot">
-                    Sample rule version {DEMO_RULE.id} · No facilitator or
-                    reward eligibility
-                  </div>
-                </section>
-                <aside className="demo-panel join-panel">
-                  <span className="join-art">
-                    <Icon name="users" size={36} />
-                  </span>
-                  <h2>
-                    {state.community.visible
-                      ? "You’re part of the board."
-                      : "A spot for you, too."}
-                  </h2>
-                  <p>
-                    {state.community.visible
-                      ? "Your demo profile is opted in. Change your alias or leave whenever you like."
-                      : "Choose a public alias and try joining the sample leaderboard."}
-                  </p>
-                  {state.lastError && state.community.visible && (
-                    <div className="inline-warning">
-                      Your row is hidden until the next successful sync.
-                    </div>
-                  )}
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      if (!state.signedIn || !state.profile.linked) {
-                        toast(
-                          "Enter the demo and link a sample profile first.",
-                        );
-                        return;
-                      }
-                      setState((s) => ({
-                        ...s,
-                        community: {
-                          visible: true,
-                          alias: alias.trim() || s.community.alias,
-                        },
-                      }));
-                      toast(
-                        "Your sample profile is now on the community board.",
-                      );
-                    }}
-                  >
-                    <label htmlFor="demo-alias">Your public alias</label>
-                    <input
-                      id="demo-alias"
-                      required
-                      maxLength={40}
-                      value={alias}
-                      onChange={(e) => setAlias(e.target.value)}
-                      placeholder={state.community.alias}
-                    />
-                    <button
-                      className="demo-button primary"
-                      disabled={
-                        !ready ||
-                        busy ||
-                        !state.signedIn ||
-                        !state.profile.linked
-                      }
-                    >
-                      {state.community.visible
-                        ? "Update alias"
-                        : "Join sample board"}
-                      <Icon name="arrow" size={16} />
-                    </button>
-                  </form>
-                  {state.community.visible && (
-                    <button
-                      className="text-button leave-button"
-                      disabled={busy}
-                      onClick={() => {
-                        setState((s) => ({
-                          ...s,
-                          community: { ...s.community, visible: false },
-                        }));
-                        toast(
-                          "You left the sample board. Your progress is still saved.",
-                        );
-                      }}
-                    >
-                      Leave board
-                    </button>
-                  )}
-                  <small>
-                    Saved in this browser only. Public profile ownership is
-                    unverified.
-                  </small>
-                </aside>
-              </div>
-            </>
           )}
           <footer className="demo-footer">
             <div>
@@ -1002,8 +798,8 @@ export default function DemoApp({
               {formError}
             </p>
             <small>
-              Linking a different URL resets its sample awards and community
-              opt-in.
+              Linking a different URL resets its sample awards and its saved
+              snapshot.
             </small>
             <div className="dialog-actions">
               <button
@@ -1128,7 +924,6 @@ export default function DemoApp({
               className="reset-button"
               onClick={() => {
                 reset();
-                setAlias("Alex M.");
                 setFilter("all");
                 setModal(null);
                 toast("Demo reset to its starting data.");

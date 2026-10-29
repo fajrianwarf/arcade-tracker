@@ -1,4 +1,14 @@
-import './globals.css';
-import './demo.css';
-export const metadata={title:'Arcade Atlas · Google Skills Tracker',description:'Explore, observe your learning progress, and learn together.'};
-export default function Layout({children}:{children:React.ReactNode}){return <html lang="en"><body>{children}</body></html>;}
+import "./globals.css";
+import "./demo.css";
+export const metadata = {
+  title: "Arcade Atlas · Google Skills Tracker",
+  description:
+    "Explore the catalog and track your public Google Skills progress.",
+};
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body>{children}</body>
+    </html>
+  );
+}

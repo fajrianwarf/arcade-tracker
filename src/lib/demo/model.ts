@@ -161,7 +161,6 @@ export type DemoState = {
   profile: { name: string; url: string; linked: boolean };
   awards: DemoAward[];
   saved: string[];
-  community: { visible: boolean; alias: string };
   lastSuccessAt: string;
   lastError: string | null;
   goalPoints: number;
@@ -185,7 +184,6 @@ export function createDemoState(now = "2026-10-29T08:00:00.000Z"): DemoState {
       earned_on: `2026-10-${String(21 + i).padStart(2, "0")}`,
     })),
     saved: ["game-serverless", "skill-ai"],
-    community: { visible: false, alias: "Alex M." },
     lastSuccessAt: now,
     lastError: null,
     goalPoints: 8,
@@ -267,7 +265,6 @@ export function linkDemoProfile(
       url,
       linked: true,
     },
-    community: { ...state.community, visible: false },
     awards: [],
     lastError: null,
   };
@@ -287,9 +284,6 @@ export function restoreDemoState(raw: string | null): DemoState | null {
       typeof s.profile?.linked !== "boolean" ||
       !Array.isArray(s.awards) ||
       !Array.isArray(s.saved) ||
-      typeof s.community?.visible !== "boolean" ||
-      typeof s.community?.alias !== "string" ||
-      s.community.alias.length > 40 ||
       typeof s.lastSuccessAt !== "string" ||
       !Number.isFinite(Date.parse(s.lastSuccessAt)) ||
       !Number.isInteger(s.goalPoints) ||
@@ -310,50 +304,19 @@ export function restoreDemoState(raw: string | null): DemoState | null {
       return null;
     // Dedupe persisted state rather than inflate the displayed award total.
     return {
-      ...s,
+      version: 1,
+      signedIn: s.signedIn,
+      profile: s.profile,
+      lastSuccessAt: s.lastSuccessAt,
+      lastError: s.lastError,
+      goalPoints: s.goalPoints,
       awards: s.awards.filter(
         (a: DemoAward, i: number, all: DemoAward[]) =>
           all.findIndex((b) => b.activity_id === a.activity_id) === i,
       ),
-      saved: [...new Set(s.saved)],
+      saved: [...new Set<string>(s.saved)],
     };
   } catch {
     return null;
   }
-}
-export type DemoBoardRow = {
-  id: string;
-  alias: string;
-  badges: number;
-  points: number;
-  you?: boolean;
-};
-const sampleBoard: DemoBoardRow[] = [
-  { id: "maya", alias: "Maya Chen", badges: 12, points: 8 },
-  { id: "ravi", alias: "Ravi K.", badges: 10, points: 7 },
-  { id: "nina", alias: "Nina Park", badges: 8, points: 5 },
-  { id: "sam", alias: "Sam Wilson", badges: 6, points: 3 },
-  { id: "leo", alias: "Leo Tan", badges: 4, points: 2 },
-];
-export function demoLeaderboard(state: DemoState): DemoBoardRow[] {
-  const rows = [...sampleBoard];
-  if (
-    state.signedIn &&
-    state.profile.linked &&
-    state.community.visible &&
-    !state.lastError
-  )
-    rows.push({
-      id: "you",
-      alias: state.community.alias,
-      badges: state.awards.length,
-      points: demoScore(state).points,
-      you: true,
-    });
-  return rows.sort(
-    (a, b) =>
-      b.points - a.points ||
-      b.badges - a.badges ||
-      a.alias.localeCompare(b.alias),
-  );
 }

@@ -5,7 +5,7 @@ import React from "react";
 import { createDemoState } from "../src/lib/demo/model";
 
 // Render owned components in an isolated DOM. No remote browser or network is used.
-test("dummy MVP: hydration, catalog search, earning, sync, failures, community and persistence", async () => {
+test("dummy MVP: hydration, catalog search, earning, sync, failures and persistence", async () => {
   const dom = new JSDOM("<!DOCTYPE html><html><body></body></html>", {
     url: "http://localhost",
   });
@@ -80,6 +80,15 @@ test("dummy MVP: hydration, catalog search, earning, sync, failures, community a
       ),
     );
     assert.ok(screen.getByRole("heading", { name: "Alex Morgan" }));
+    assert.equal(screen.queryByRole("button", { name: "Community" }), null);
+    assert.deepEqual(
+      Array.from(
+        dom.window.document.querySelectorAll(
+          'nav[aria-label="Main navigation"] button',
+        ),
+      ).map((b) => b.textContent?.trim()),
+      ["Progress", "Catalog"],
+    );
     fireEvent.click(screen.getByRole("button", { name: "Catalog" }));
     assert.equal(
       screen.getAllByRole("button", { name: "View details" }).length,
@@ -135,17 +144,6 @@ test("dummy MVP: hydration, catalog search, earning, sync, failures, community a
     assert.equal(screen.queryByRole("dialog"), null);
     let stored = JSON.parse(dom.window.localStorage.getItem(storageKey)!);
     assert.equal(stored.awards.length, 7);
-    fireEvent.click(screen.getByRole("button", { name: "Community" }));
-    fireEvent.change(screen.getByLabelText("Your public alias"), {
-      target: { value: "Test learner" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Join sample board" }));
-    assert.ok(screen.getByRole("cell", { name: /Test learner.*You/ }));
-    fireEvent.click(screen.getByRole("button", { name: "Leave board" }));
-    assert.equal(
-      screen.queryByRole("cell", { name: /Test learner.*You/ }),
-      null,
-    );
     fireEvent.click(screen.getByRole("button", { name: "Demo controls" }));
     fireEvent.click(
       screen.getByRole("button", { name: /Simulate a private profile/ }),
