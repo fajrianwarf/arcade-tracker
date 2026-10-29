@@ -1,0 +1,54 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {PGlite} from '@electric-sql/pglite';
+import {readFile} from 'node:fs/promises';
+
+test('PostgreSQL migration, queued ingestion, deduplication, leases, retries, RLS and opt-in board',async()=>{
+ const db=new PGlite();
+ try{
+ await db.exec(`create role anon;create role authenticated;create role service_role bypassrls;create schema auth;
+ create table auth.users(id uuid primary key);
+ create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+ grant usage on schema public,auth to anon,authenticated,service_role;
+ grant execute on function auth.uid() to authenticated;
+ alter default privileges in schema public grant all on tables to anon,authenticated,service_role;
+ alter default privileges in schema public grant all on sequences to anon,authenticated,service_role;`);
+ await db.exec(await readFile('supabase/migrations/202610220001_initial.sql','utf8'));
+ await db.exec(await readFile('supabase/migrations/202610220002_reviewed_catalog.sql','utf8'));
+ const a='00000000-0000-4000-8000-000000000001',b='00000000-0000-4000-8000-000000000002';
+ await db.query('insert into auth.users values($1),($2)',[a,b]);
+ const url='https://www.skills.google/public_profiles/132e9469-d807-4cee-884a-d1775a2ccb78';
+ const link=await db.query<{id:string}>('select link_profile($1,$2) as id',[url,a]);const profile=link.rows[0].id;
+ await db.query('select link_profile($1,$2)',[url,a]);
+ assert.equal((await db.query<{n:number}>('select count(*)::int n from sync_jobs')).rows[0].n,1);
+ let job=(await db.query<{id:string;lease_token:string}>('select * from claim_sync_jobs(3)')).rows[0];
+ const snapshot={url,display_name:'Learner',adapter_version:'test/v1',coverage:'visible_page_only',awards:[{external_id:'123',title:'Badge',earned_on:'2026-10-01',earned_label:'Earned Oct 1, 2026',credential_url:url+'/badges/123',activity_url:null}]};
+ await db.query('select complete_profile_sync($1,$2,$3)',[job.id,job.lease_token,JSON.stringify(snapshot)]);
+ await db.query("update external_profiles set next_sync_at=now()-interval '1 hour'");
+ await db.query('select enqueue_due_profiles()');
+ job=(await db.query<{id:string;lease_token:string}>('select * from claim_sync_jobs(3)')).rows[0];
+ await db.query('select complete_profile_sync($1,$2,$3)',[job.id,job.lease_token,JSON.stringify(snapshot)]);
+ assert.equal((await db.query<{n:number}>('select count(*)::int n from earned_badges')).rows[0].n,1);
+ await db.exec(`set role authenticated;select set_config('request.jwt.claim.sub','${b}',false);`);
+ for(const table of ['profile_links','external_profiles','earned_badges','score_snapshots','sync_jobs','source_observations'])assert.equal((await db.query(`select * from ${table}`)).rows.length,0,table);
+ await assert.rejects(db.query('select claim_sync_jobs(3)'),/permission denied/);
+ await db.exec(`select set_config('request.jwt.claim.sub','${a}',false);`);
+ assert.equal((await db.query('select * from external_profiles')).rows.length,1);
+ await assert.rejects(db.query('update profile_links set profile_id=gen_random_uuid()'),/permission denied/);
+ await db.query("update profile_links set leaderboard_opt_in=true,alias='My alias'");
+ await db.exec('reset role;set role anon');
+ assert.equal((await db.query('select * from community_leaderboard()')).rows.length,1);
+ assert.equal((await db.query('select * from external_profiles')).rows.length,0);
+ await db.exec('reset role');
+ await db.query("update external_profiles set next_sync_at=now()-interval '1 hour'");await db.query('select enqueue_due_profiles()');
+ const old=(await db.query<{id:string;lease_token:string}>('select * from claim_sync_jobs(3)')).rows[0];
+ await db.query("update sync_jobs set lease_until=now()-interval '1 minute' where id=$1",[old.id]);
+ job=(await db.query<{id:string;lease_token:string}>('select * from claim_sync_jobs(3)')).rows[0];
+ assert.notEqual(job.lease_token,old.lease_token);
+ await assert.rejects(db.query('select complete_profile_sync($1,$2,$3)',[old.id,old.lease_token,JSON.stringify(snapshot)]),/Expired lease/);
+ await db.query("select fail_profile_sync($1,$2,'HTTP 429')",[job.id,job.lease_token]);
+ assert.equal((await db.query<{n:number}>('select count(*)::int n from earned_badges')).rows[0].n,1);
+ assert.equal((await db.query('select * from community_leaderboard()')).rows.length,0);
+ assert.equal((await db.query<{n:number}>("select count(*)::int n from sync_jobs where status='queued' and available_at>now()")).rows[0].n,1);
+ }finally{await db.close();}
+});

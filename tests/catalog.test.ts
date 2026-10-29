@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {parseArcadeCatalog} from '../src/lib/catalog';
+test('extracts and deduplicates official embedded game cards without publishing',()=>{const html='<div data-code="&lt;div class=&quot;shuffle-item&quot;&gt;&lt;h5 class=&quot;card-title&quot;&gt;Arcade Adventure&lt;/h5&gt;&lt;a href=&quot;https://www.skills.google/games/7496?tracking=1&quot;&gt;Play&lt;/a&gt;&lt;/div&gt;"></div>';const r=parseArcadeCatalog(html+html);assert.equal(r.items.length,1);assert.equal(r.items[0].source_url,'https://www.skills.google/games/7496');assert.equal(r.items[0].published,false);});
+test('catalog markup changes fail closed',()=>assert.throws(()=>parseArcadeCatalog('<html>Sign in</html>')));
